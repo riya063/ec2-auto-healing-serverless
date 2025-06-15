@@ -41,7 +41,7 @@ jobs:
             --region ap-south-1 \
             --no-confirm-changeset \
             --parameter-overrides \
-              KeyName=ec2_key_apir \
+              KeyName=ec2_key_pair \
               VpcId=${{ secrets.VPC_ID }} \
               SubnetIds=${{ secrets.SUBNET_IDS }} \
               ImageId=${{ secrets.IMAGE_ID }}
