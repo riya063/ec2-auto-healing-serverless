@@ -1,34 +1,15 @@
-name: Deploy SAM App
-on:
-  push:
-    branches:
-      - main
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-
-      - name: Set up Python 3.9
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.9'
-
-      - name: Install dependencies for SAM build
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y python3.9 python3.9-venv python3.9-dev
-
-      - name: Install SAM CLI
-        run: |
-          pip install aws-sam-cli
-
-      - name: Deploy with SAM
-        run: |
-          sam build
-          sam deploy --no-confirm-changeset --stack-name ec2-auto-healing --capabilities CAPABILITY_IAM
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_REGION: ap-south-1
+- name: Deploy with SAM
+  run: |
+    sam build
+    sam deploy --no-confirm-changeset \
+      --stack-name ec2-auto-healing \
+      --capabilities CAPABILITY_IAM \
+      --region ap-south-1 \
+      --parameter-overrides \
+        VpcId=${{ secrets.VPC_ID }} \
+        SubnetIds=${{ secrets.SUBNET_IDS }} \
+        KeyName=${{ secrets.KEY_NAME }} \
+        ImageId=${{ secrets.AMI_ID }}
+  env:
+    AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+    AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
