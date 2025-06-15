@@ -1,0 +1,45 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Serverless EC2 Auto Healing System
+
+Parameters:
+  SNSTopicEmail:
+    Type: String
+    Description: Email to receive EC2 health alerts
+
+Resources:
+  EC2HealthCheckFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: check_health.handler
+      Runtime: python3.9
+      Timeout: 30
+      Environment:
+        Variables:
+          SNS_TOPIC_ARN: !Ref HealthAlertTopic
+      Policies:
+        - EC2FullAccess
+        - SNSPublishMessagePolicy:
+            TopicName: !GetAtt HealthAlertTopic.TopicName
+      Events:
+        Schedule:
+          Type: Schedule
+          Properties:
+            Schedule: rate(5 minutes)
+
+  HealthAlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+        - Protocol: email
+          Endpoint: !Ref SNSTopicEmail
+
+Outputs:
+  LambdaFunctionArn:
+    Description: "Lambda Function ARN"
+    Value: !GetAtt EC2HealthCheckFunction.Arn
+
+  SNSAlertTopicArn:
+    Description: "SNS Topic ARN for Alerts"
+    Value: !Ref HealthAlertTopic
