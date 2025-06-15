@@ -1,45 +1,109 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Transform: AWS::Serverless-2016-10-31
-Description: Serverless EC2 Auto Healing System
+Description: EC2 Auto Healing using Auto Scaling Group (No Lambda)
 
 Parameters:
-  SNSTopicEmail:
-    Type: String
-    Description: Email to receive EC2 health alerts
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC where the instances will be launched
+
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Subnets for the Auto Scaling Group
+
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Name of an existing EC2 KeyPair to SSH into the instance
+
+  ImageId:
+    Type: AWS::EC2::Image::Id
+    Description: AMI ID for EC2 instance
 
 Resources:
-  EC2HealthCheckFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      CodeUri: src/
-      Handler: check_health.handler
-      Runtime: python3.9
-      Timeout: 30
-      Environment:
-        Variables:
-          SNS_TOPIC_ARN: !Ref HealthAlertTopic
-      Policies:
-        - EC2FullAccess
-        - SNSPublishMessagePolicy:
-            TopicName: !GetAtt HealthAlertTopic.TopicName
-      Events:
-        Schedule:
-          Type: Schedule
-          Properties:
-            Schedule: rate(5 minutes)
 
-  HealthAlertTopic:
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable SSH access
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+
+  EC2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref EC2InstanceRole
+
+  EC2LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        InstanceType: t2.micro
+        ImageId: !Ref ImageId
+        KeyName: !Ref KeyName
+        SecurityGroupIds:
+          - !Ref EC2SecurityGroup
+        IamInstanceProfile:
+          Arn: !GetAtt EC2InstanceProfile.Arn
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: AutoHealingInstance
+
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier: !Ref SubnetIds
+      LaunchTemplate:
+        LaunchTemplateId: !Ref EC2LaunchTemplate
+        Version: !GetAtt EC2LaunchTemplate.LatestVersionNumber
+      MinSize: 1
+      MaxSize: 2
+      DesiredCapacity: 1
+      HealthCheckType: EC2
+      HealthCheckGracePeriod: 300
+      Tags:
+        - Key: Name
+          Value: auto-heal-instance
+          PropagateAtLaunch: true
+
+  AutoScalingSNSTopic:
     Type: AWS::SNS::Topic
     Properties:
-      Subscription:
-        - Protocol: email
-          Endpoint: !Ref SNSTopicEmail
+      TopicName: ec2-autohealing-alerts
+
+  AutoScalingNotification:
+    Type: AWS::AutoScaling::NotificationConfiguration
+    Properties:
+      AutoScalingGroupName: !Ref AutoScalingGroup
+      NotificationTypes:
+        - autoscaling:EC2_INSTANCE_LAUNCH
+        - autoscaling:EC2_INSTANCE_TERMINATE
+        - autoscaling:EC2_INSTANCE_HEALTH_CHECK
+      TopicARN: !Ref AutoScalingSNSTopic
 
 Outputs:
-  LambdaFunctionArn:
-    Description: "Lambda Function ARN"
-    Value: !GetAtt EC2HealthCheckFunction.Arn
+  SNSTopicArn:
+    Description: SNS topic for auto healing notifications
+    Value: !Ref AutoScalingSNSTopic
 
-  SNSAlertTopicArn:
-    Description: "SNS Topic ARN for Alerts"
-    Value: !Ref HealthAlertTopic
+  ASGName:
+    Description: Auto Scaling Group Name
+    Value: !Ref AutoScalingGroup
