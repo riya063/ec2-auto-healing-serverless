@@ -3,18 +3,27 @@ on:
   push:
     branches:
       - main
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Set up Python
+
+      - name: Set up Python 3.9
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
+          python-version: '3.9'
+
+      - name: Install dependencies for SAM build
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3.9 python3.9-venv python3.9-dev
+
       - name: Install SAM CLI
         run: |
           pip install aws-sam-cli
+
       - name: Deploy with SAM
         run: |
           sam build
