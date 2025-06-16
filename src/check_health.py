@@ -24,6 +24,12 @@ jobs:
       - name: Deploy using SAM
         run: |
           sam build
-          sam deploy --no-confirm-changeset --stack-name ec2-auto-healing \
+          sam deploy --no-confirm-changeset \
+                     --stack-name ec2-auto-healing \
                      --capabilities CAPABILITY_IAM \
-                     --parameter-overrides SNSTopicEmail=your-email@example.com
+                     --parameter-overrides \
+                       VpcId=${{ secrets.VPC_ID }} \
+                       SubnetIds='${{ secrets.SUBNET_IDS }}' \
+                       KeyName=${{ secrets.KEY_NAME }} \
+                       ImageId=${{ secrets.IMAGE_ID }}
+
